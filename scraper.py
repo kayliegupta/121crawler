@@ -1,5 +1,6 @@
 import re
-import json, 
+import json
+from collections import defaultdict 
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin, urldefrag
 from utils.__init__ import get_logger
@@ -51,6 +52,7 @@ def tokenizer(text):
     for token in tokens:
         if token not in STOP_WORDS:
             valid_tokens.append(token)
+    return valid_tokens
 
 def generate_report():
     print(f"UNIQUE PAGES: {len(crawl_data['unique_pages'])}")
@@ -81,7 +83,7 @@ def update_analytics(url, words):
 
 
             
-    num_words = len(tokenizer(text))
+    
 
 
 def extract_next_links(url, resp):
@@ -104,7 +106,7 @@ def extract_next_links(url, resp):
     if not resp.raw_response.content:
         return link_list
 
-    soup = BeautifulSoup(resp.raw_response.content, 'xml')
+    soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
     try:
         for link in soup.find_all("a"):
             ex_href = link.get('href')
@@ -118,35 +120,65 @@ def extract_next_links(url, resp):
     return link_list
 
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
-    # If you decide to crawl it, return True; otherwise return False.
-    # There are already some conditions that return False.
-
-
     try:
         parsed = urlparse(url)
-        if parsed.scheme not in set(["http", "https"]): 
-            return False
-        given_domains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"]
-        allowed_subdomains = any(parsed.netloc == p.strip(".") or parsed.netloc.endswith(p) for p in given_domains)
-        if parsed.netloc not in allowed_subdomains: # check subdomain
+        
+        # Must be http or https
+        if parsed.scheme not in {"http", "https"}:
             return False
         
-        if len(url) > 150: #likely an infinite loop
+        # Allowed domains
+        given_domains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"]
+        allowed = any(
+            parsed.netloc == d or parsed.netloc.endswith("." + d)
+            for d in given_domains
+        )
+        if not allowed:
             return False
-            
+
+        # Avoid overly long URLs (likely traps)
+        if len(url) > 200:
+            return False
+
+        # Avoid URLs with too many query parameters (likely traps)
+        if len(parsed.query) > 100:
+            return False
+
+        # Avoid calendar date traps
+        if re.search(r'/day/\d{4}-\d{2}-\d{2}', parsed.path):
+            return False
+        if re.search(r'/\d{4}/\d{2}/\d{2}', parsed.path):
+            return False
+        if re.search(r'tribe-bar-date', parsed.query):
+            return False
+        if re.search(r'ical=1', parsed.query):
+            return False
+        if re.search(r'outlook-ical=1', parsed.query):
+            return False
+        
+        if 'Keywords=' in parsed.query:
+            return False
+
+        # Avoid repeated path segments 
+        path_parts = [p for p in parsed.path.split('/') if p]  # filter empty strings
+        if len(path_parts) != len(set(path_parts)):
+            return False
+
+        
         return not re.match(
-                r".*\.(css|js|bmp|gif|jpe?g|ico"
-                + r"|png|tiff?|mid|mp2|mp3|mp4"
-                + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-                + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-                + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-                + r"|epub|dll|cnf|tgz|sha1"
-                + r"|thmx|mso|arff|rtf|jar|csv"
-                + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
+            r".*\.(css|js|bmp|gif|jpe?g|ico"
+            + r"|png|tiff?|mid|mp2|mp3|mp4"
+            + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
+            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
+            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
+            + r"|epub|dll|cnf|tgz|sha1"
+            + r"|thmx|mso|arff|rtf|jar|csv"
+            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$",
+            parsed.path.lower()
+        )
 
     except TypeError:
-        print ("TypeError for ", parsed)
+        print("TypeError for", parsed)
         raise
 
 def scraper(url, resp):
@@ -157,5 +189,9 @@ def scraper(url, resp):
     for element in soup(["script", "style"]):
         element.decompose()
     clean_txt = soup.get_text(separator=" ", strip=True)
-    update_analytics(url, clean_txt)
+    tokenized_text = tokenizer(clean_txt)
+    if len(tokenized_text) < 50:
+        return []
+    update_analytics(url, tokenized_text)
+    save_analytics()
     return [link for link in links if is_valid(link)]
