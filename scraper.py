@@ -5,8 +5,50 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin, urldefrag
 from utils.__init__ import get_logger
 import hashlib
+"""near duplicates use
+-search
+- discovery
+discovery uses fingerprints
+similarity = fingerprint intersection / fingerprint union (done by hashing)
+define a threshold
+if similarity >= threshold, they are near dupes"""
 
-#testing my access
+fingerprints = {}
+
+def hash_helper_differences(h1,h2):
+    #finds num bits differing between the hashes
+    x = h1 ^ h2
+    dist = 0
+    while x:
+        dist += 1
+        x &= x-1
+    return dist
+
+def compute_fingerprint(tokens):
+    #computes fingerprint by hashing
+    v = [0] * 64
+    for token in tokens:
+        token_hash = int(hashlib.md5(token.encode('utf-8')).hexdigest(), 16)
+        for i in range(64):
+            bit = (token_hash>>i) & 1
+            if bit:
+                v[i] +=1
+            else:
+                v[i]-=1
+    fingerprint = 0
+    for i in range(64):
+        if v[i] >= 0:
+            fingerprint |= (1<<i)
+    return fingerprint
+
+def is_near_dupe(new_fp, threshold = 3):
+    #compares hash differences (or similairity) to threshold
+    # to determine if it is a near duplicate
+    for fp in fingerprints.keys():
+        if hash_helper_differences(new_fp, fp) <= threshold:
+            return True, fingerprints[fp]
+    return False, None
+
 
 seen_content_hashes = set()
 pages_parsed = 0
@@ -161,6 +203,10 @@ def is_valid(url):
         # Avoid URLs with too many query parameters (likely traps)
         if len(parsed.query) > 100:
             return False
+        
+        #Avoid infinite path holes (i.e. a/b/c/d/...)
+        if len(parsed.path.split('/')) > 10:
+            return False
 
         # Avoid calendar date traps
         if re.search(r'/day/\d{4}-\d{2}-\d{2}', parsed.path):
@@ -222,6 +268,19 @@ def scraper(url, resp):
     tokenized_text = tokenizer(clean_txt)
     if len(tokenized_text) < 50:
         return []
+    
+    """Near Duplicate"""
+    curr_fp = compute_fingerprint(tokenized_text)
+    is_near, original_urls = is_near_dupe(curr_fp)
+    if is_near:
+        print(f"SKIP: Near-duplicate of {original_urls[0]}")
+        return []
+
+    seen_content_hashes.add(page_hash)
+    if curr_fp not in fingerprints:
+        fingerprints[curr_fp] = []
+    fingerprints[curr_fp].append(url)
+
     update_analytics(url, tokenized_text)
     
     global pages_parsed
@@ -231,4 +290,6 @@ def scraper(url, resp):
 
     if pages_parsed % 50 == 0:
         save_analytics()
+
+    links = extract_next_links(url,resp)
     return [link for link in links if is_valid(link)]
