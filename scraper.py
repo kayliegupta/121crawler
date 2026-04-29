@@ -6,6 +6,8 @@ from urllib.parse import urlparse, urljoin, urldefrag
 from utils.__init__ import get_logger
 import hashlib
 
+#testing my access
+
 seen_content_hashes = set()
 pages_parsed = 0
 
