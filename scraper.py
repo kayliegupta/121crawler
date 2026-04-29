@@ -211,10 +211,12 @@ def scraper(url, resp):
     # clean the text from HTML format    
     clean_txt = soup.get_text(separator=" ", strip=True)
 
-
+    """ Exact Duplicate """
     page_hash = hashlib.md5(clean_txt.encode('utf-8')).hexdigest()
     if page_hash in seen_content_hashes:
         return []
+    
+    """ Tokenize clean text"""
     tokenized_text = tokenizer(clean_txt)
     if len(tokenized_text) < 50:
         return []
