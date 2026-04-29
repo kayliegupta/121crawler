@@ -1,10 +1,13 @@
 import re
-import json
+import json, os
 from collections import defaultdict 
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin, urldefrag
 from utils.__init__ import get_logger
+import hashlib
 
+seen_content_hashes = set()
+pages_parsed = 0
 
 STOP_WORDS = {
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
@@ -35,6 +38,18 @@ crawl_data = {
     "subdomains": defaultdict(set)
 }
 
+def load_analytics():
+    if os.path.exists("analytics.json"):
+        with open("analytics.json", "r") as file:
+            data = json.load(file)
+            crawl_data["unique_pages"] = set(data["unique_pages"])
+            crawl_data["longest_page"] = data["longest_page"]
+    
+            crawl_data["word_freq"] = defaultdict(int, data["word_freq"])
+            crawl_data["subdomains"] = defaultdict(set, {k: set(v) for k, v in data["subdomains"].items()})
+
+
+""" Document pages numbers, lengths, word frequencies etc. for generaing report """
 def save_analytics():
     data = {
         "unique_pages": list(crawl_data["unique_pages"]),
@@ -46,6 +61,7 @@ def save_analytics():
         json.dump(data, file)
 
 
+""" Tokenize cleaned text, removing stop words, returns valid tokens """
 def tokenizer(text):
     valid_tokens = []
     tokens = re.findall(r'[a-zA-Z0-9]+', text.lower()) # Extract only valid alphanumeric words
@@ -54,6 +70,7 @@ def tokenizer(text):
             valid_tokens.append(token)
     return valid_tokens
 
+""" Prints the report """
 def generate_report():
     print(f"UNIQUE PAGES: {len(crawl_data['unique_pages'])}")
     page = crawl_data["longest_page"]
@@ -66,6 +83,7 @@ def generate_report():
     for subdomain in sorted(crawl_data["subdomains"].keys()):
         print(f"   {subdomain}, {len(crawl_data['subdomains'][subdomain])}")
 
+""" Updates crawl data for each page """
 def update_analytics(url, words):
     url = urldefrag(url)[0]
     if url in crawl_data["unique_pages"]:
@@ -79,13 +97,10 @@ def update_analytics(url, words):
     if host.endswith(".uci.edu"):
         crawl_data["subdomains"][host].add(url)
 
-    #store word counts for analysis questions
 
 
-            
-    
 
-
+""" Extract hyperlink, defragments them, returns a list of potential links to crawl """
 def extract_next_links(url, resp):
     # Implementation required.
     # url: the URL that was used to get the page
@@ -111,14 +126,15 @@ def extract_next_links(url, resp):
         for link in soup.find_all("a"):
             ex_href = link.get('href')
             if ex_href:
-                
-                defrag_url, frag = urldefrag(urljoin(url, ex_href))
+    
+                defrag_url, frag = urldefrag(urljoin(url, ex_href)) # Defragment the URL
                 link_list.append(defrag_url)
     except Exception:
         print("ERROR: Failed to parse")
 
     return link_list
 
+""" Validates a URL + decides if its worth crawling """
 def is_valid(url):
     try:
         parsed = urlparse(url)
@@ -156,6 +172,7 @@ def is_valid(url):
         if re.search(r'outlook-ical=1', parsed.query):
             return False
         
+        # Common trap
         if 'Keywords=' in parsed.query:
             return False
 
@@ -180,18 +197,34 @@ def is_valid(url):
     except TypeError:
         print("TypeError for", parsed)
         raise
-
+""" Scrapes page """
 def scraper(url, resp):
     if resp.status != 200 or not resp.raw_response or not resp.raw_response.content:
         return []
+    
     links = extract_next_links(url, resp)
     soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
+
     for element in soup(["script", "style"]):
         element.decompose()
+    
+    # clean the text from HTML format    
     clean_txt = soup.get_text(separator=" ", strip=True)
+
+
+    page_hash = hashlib.md5(clean_txt.encode('utf-8')).hexdigest()
+    if page_hash in seen_content_hashes:
+        return []
     tokenized_text = tokenizer(clean_txt)
     if len(tokenized_text) < 50:
         return []
     update_analytics(url, tokenized_text)
-    save_analytics()
+    
+    global pages_parsed
+    pages_parsed += 1
+
+    # Save analytics every 50 pages to avoid I/O overload
+
+    if pages_parsed % 50 == 0:
+        save_analytics()
     return [link for link in links if is_valid(link)]
