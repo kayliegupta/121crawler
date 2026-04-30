@@ -207,6 +207,26 @@ def is_valid(url):
         #Avoid infinite path holes (i.e. a/b/c/d/...)
         if len(parsed.path.split('/')) > 10:
             return False
+        
+        #Avoid sorting
+        query_lower = parsed.query.lower()
+        if re.search(r'(filter|sort|order|limit|action|replytocom|share)=', query_lower):
+            return False
+            
+        # Avoid filters
+        if "%5b" in query_lower or "[" in query_lower:
+            return False
+
+        path_lower = parsed.path.lower()
+        path_parts = [p for p in path_lower.split('/') if p]  # filter empty strings
+
+        # Avoid pages on pages
+        if re.search(r'/page/\d+', path_lower):
+            return False
+        
+        #Avoid excessivley long paths
+        if len(url.split('/')) > 10:
+            return False
 
         # Avoid calendar date traps
         if re.search(r'/day/\d{4}-\d{2}-\d{2}', parsed.path):
@@ -221,12 +241,18 @@ def is_valid(url):
             return False
         if re.search(r'/\d{4}-\d{2}-\d{2}$', parsed.path):
             return False
+        if re.search(r'/\d{4}/\d{2}', path_lower) or re.search(r'/day/\d{4}-\d{2}', path_lower):
+            return False
+        if re.search(r'\d{4}-\d{2}-\d{2}', path_lower):
+            return False
         if "isg.ics.uci.edu" in url:
             if "/events/" in parsed.path and re.search(r'\d{4}-\d{2}', parsed.path):
                 return False
         if "isg.ics.uci.edu" in parsed.netloc:
             if re.search(r'/events/\d{4}-\d{2}-\d{2}', parsed.path):
                 return False
+        if re.search(r'(tribe-bar-date|ical|outlook-ical)=', query_lower):
+            return False
         
         # Common trap
         if 'Keywords=' in parsed.query:
@@ -236,7 +262,7 @@ def is_valid(url):
         path_parts = [p for p in parsed.path.split('/') if p]  # filter empty strings
         if len(path_parts) != len(set(path_parts)):
             return False
-        
+
         # Avoid fake links
         if "%20" in url or "http" in parsed.path:
             return False
