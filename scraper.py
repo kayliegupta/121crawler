@@ -226,7 +226,7 @@ def is_valid(url):
                 return False
         if "isg.ics.uci.edu" in parsed.netloc:
             if re.search(r'/events/\d{4}-\d{2}-\d{2}', parsed.path):
-            return False
+                return False
         
         # Common trap
         if 'Keywords=' in parsed.query:
