@@ -228,6 +228,14 @@ def is_valid(url):
         path_parts = [p for p in parsed.path.split('/') if p]  # filter empty strings
         if len(path_parts) != len(set(path_parts)):
             return False
+        
+        # Avoid fake links
+        if "%20" in url or "http" in parsed.path:
+            return False
+
+        #Avoid excessivley deep directories
+        if len(path_parts) > 6: 
+            return False 
 
         
         return not re.match(
