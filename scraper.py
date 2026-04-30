@@ -204,9 +204,18 @@ def is_valid(url):
         if len(parsed.query) > 100:
             return False
         
-        #Avoid infinite path holes (i.e. a/b/c/d/...)
-        if len(parsed.path.split('/')) > 10:
+        path_lower = parsed.path.lower()
+        query_lower = parsed.query.lower()
+
+        # Path depth 
+        path_parts = [p for p in path_lower.split('/') if p]
+        if len(path_parts) > 6:
             return False
+        
+        # Repeated path segments (loop trap)
+        if len(path_parts) != len(set(path_parts)):
+            return False
+        
         
         #Avoid sorting
         query_lower = parsed.query.lower()
@@ -217,60 +226,49 @@ def is_valid(url):
         if "%5b" in query_lower or "[" in query_lower:
             return False
 
-        path_lower = parsed.path.lower()
-        path_parts = [p for p in path_lower.split('/') if p]  # filter empty strings
+        
+        
+        #  Calendar / date traps (
+        DATE_PATH_PATTERNS = [
+            r'/\d{4}/\d{2}',           # /2024/05 or /2024/05/12
+            r'/\d{4}-\d{2}',           # /2024-05
+            r'\d{4}-\d{2}-\d{2}',      # any full ISO date anywhere in path
+            r'/day/\d',                # /day/2024-...
+            r'/page/\d+',              # pagination
+        ]
+        if any(re.search(p, path_lower) for p in DATE_PATH_PATTERNS):
+            return False
 
-        # Avoid pages on pages
-        if re.search(r'/page/\d+', path_lower):
+        DATE_QUERY_PATTERNS = [
+            r'tribe-bar-date', r'\bical\b', r'outlook-ical',
+        ]
+        if any(re.search(p, query_lower) for p in DATE_QUERY_PATTERNS):
             return False
         
-        #Avoid excessivley long paths
-        if len(url.split('/')) > 10:
-            return False
-
-        # Avoid calendar date traps
-        if re.search(r'/day/\d{4}-\d{2}-\d{2}', parsed.path):
-            return False
-        if re.search(r'/\d{4}/\d{2}/\d{2}', parsed.path):
-            return False
-        if re.search(r'tribe-bar-date', parsed.query):
-            return False
-        if re.search(r'ical=1', parsed.query):
-            return False
-        if re.search(r'outlook-ical=1', parsed.query):
-            return False
-        if re.search(r'/\d{4}-\d{2}-\d{2}$', parsed.path):
-            return False
-        if re.search(r'/\d{4}/\d{2}', path_lower) or re.search(r'/day/\d{4}-\d{2}', path_lower):
-            return False
-        if re.search(r'\d{4}-\d{2}-\d{2}', path_lower):
-            return False
-        if "isg.ics.uci.edu" in url:
-            if "/events/" in parsed.path and re.search(r'\d{4}-\d{2}', parsed.path):
-                return False
-        if "isg.ics.uci.edu" in parsed.netloc:
-            if re.search(r'/events/\d{4}-\d{2}-\d{2}', parsed.path):
-                return False
-        if re.search(r'(tribe-bar-date|ical|outlook-ical)=', query_lower):
+        #  Query param traps 
+        TRAP_QUERY_PARAMS = re.compile(
+            r'(filter|sort|order|limit|action|replytocom|share|'
+            r'attachment_id|keywords|s|search|tag|author|'
+            r'sessionid|token|sid)='
+        )
+        if TRAP_QUERY_PARAMS.search(query_lower):
             return False
         
-        # Common trap
-        if 'Keywords=' in parsed.query:
+        # ── Low-value path patterns
+        
+        LOW_VALUE_PATHS = re.compile(
+            r'/(feed|rss|atom|tag|category|author|wp-login|wp-admin|'
+            r'wp-json|xmlrpc\.php|comment-page-\d+)(/|$)'
+        )
+        if LOW_VALUE_PATHS.search(path_lower):
             return False
 
-        # Avoid repeated path segments 
-        path_parts = [p for p in parsed.path.split('/') if p]  # filter empty strings
-        if len(path_parts) != len(set(path_parts)):
-            return False
 
         # Avoid fake links
         if "%20" in url or "http" in parsed.path:
             return False
 
-        #Avoid excessivley deep directories
-        if len(path_parts) > 6: 
-            return False 
-
+    
         
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
@@ -287,13 +285,13 @@ def is_valid(url):
     except TypeError:
         print("TypeError for", parsed)
         raise
+
 """ Scrapes page """
 
 def scraper(url, resp):
     if resp.status != 200 or not resp.raw_response or not resp.raw_response.content:
         return []
     
-    links = extract_next_links(url, resp)
     soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
 
     for element in soup(["script", "style"]):
