@@ -221,8 +221,8 @@ def is_valid(url):
             return False
         if re.search(r'/\d{4}-\d{2}-\d{2}$', parsed.path):
             return False
-        if "isg.ics.uci.edu/events/" in url:
-            if re.search(r'\d{4}-\d{2}-\d{2}', parsed.path):
+        if "isg.ics.uci.edu" in url:
+            if "/events/" in parsed.path and re.search(r'\d{4}-\d{2}', parsed.path):
                 return False
         
         # Common trap
@@ -259,6 +259,7 @@ def is_valid(url):
         print("TypeError for", parsed)
         raise
 """ Scrapes page """
+
 def scraper(url, resp):
     if resp.status != 200 or not resp.raw_response or not resp.raw_response.content:
         return []
