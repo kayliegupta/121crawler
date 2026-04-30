@@ -219,6 +219,11 @@ def is_valid(url):
             return False
         if re.search(r'outlook-ical=1', parsed.query):
             return False
+        if re.search(r'/\d{4}-\d{2}-\d{2}$', parsed.path):
+            return False
+        if "isg.ics.uci.edu/events/" in url:
+            if re.search(r'\d{4}-\d{2}-\d{2}', parsed.path):
+                return False
         
         # Common trap
         if 'Keywords=' in parsed.query:
