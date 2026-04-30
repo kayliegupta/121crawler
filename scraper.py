@@ -216,6 +216,10 @@ def is_valid(url):
         if len(path_parts) != len(set(path_parts)):
             return False
         
+        # DokuWiki-specific trap: block all action/revision/index params
+        if 'doku.php' in parsed.path:
+            if re.search(r'(rev|do|idx)=', query_lower):
+                return False
         
         #Avoid sorting
         query_lower = parsed.query.lower()
