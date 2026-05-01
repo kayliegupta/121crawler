@@ -199,6 +199,7 @@ def is_valid(url):
         # Avoid overly long URLs (likely traps)
         if len(url) > 200:
             return False
+        
 
         # Avoid URLs with too many query parameters (likely traps)
         if len(parsed.query) > 100:
@@ -266,6 +267,12 @@ def is_valid(url):
         )
         if LOW_VALUE_PATHS.search(path_lower):
             return False
+        
+        if 'wp-login' in path_lower:
+            return False
+        
+        if re.search(r'\bC=[DMNS];O=[AD]\b', parsed.query):
+            return False
 
 
         # Avoid fake links
@@ -278,7 +285,7 @@ def is_valid(url):
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpg|avi|rm|m4v|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
+            + r"|ps|eps|tex|ppt|pptx|ppsx|doc|docx|xls|xlsx|names"
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
@@ -308,6 +315,12 @@ def scraper(url, resp):
     page_hash = hashlib.md5(clean_txt.encode('utf-8')).hexdigest()
     if page_hash in seen_content_hashes:
         return []
+    
+
+    """Excessively long pages"""
+    content_length = resp.raw_response.headers.get('content-length')
+    if content_length and int(content_length) > 10_000_000:  # 10MB
+            return []
     
     """ Tokenize clean text"""
     tokenized_text = tokenizer(clean_txt)
