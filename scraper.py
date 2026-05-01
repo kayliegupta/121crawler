@@ -108,9 +108,9 @@ def save_analytics():
 """ Tokenize cleaned text, removing stop words, returns valid tokens """
 def tokenizer(text):
     valid_tokens = []
-    tokens = re.findall(r'[a-zA-Z0-9]+', text.lower()) # Extract only valid alphanumeric words
+    tokens = re.findall(r'[a-zA-Z0-9]+', text.lower())
     for token in tokens:
-        if token not in STOP_WORDS:
+        if token not in STOP_WORDS and len(token) > 1:  
             valid_tokens.append(token)
     return valid_tokens
 
@@ -277,7 +277,7 @@ def is_valid(url):
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
-            + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
+            + r"|wav|avi|mov|mpg|avi|rm|m4v|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
             + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
