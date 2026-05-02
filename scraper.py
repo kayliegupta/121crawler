@@ -344,9 +344,9 @@ def scraper(url, resp):
     global pages_parsed
     pages_parsed += 1
 
-    # Save analytics every 50 pages to avoid I/O overload
+    # Save analytics every 25 pages to avoid I/O overload
 
-    if pages_parsed % 50 == 0:
+    if pages_parsed % 25 == 0:
         save_analytics()
 
     links = extract_next_links(url,resp)
